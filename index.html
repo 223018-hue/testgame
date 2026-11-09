@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tarzan Runner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #34d399; /* Bright jungle sky */
+            touch-action: none;
+            font-family: 'Inter', sans-serif;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .pointer-events-auto {
+            pointer-events: auto;
+        }
+        
+        /* Background Gradient for Sky */
+        #bg-sky {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(to bottom, #10b981 0%, #a7f3d0 100%);
+            z-index: -1;
+        }
+
+        /* Screen Shake Animation */
+        @keyframes shake {
+            0% { transform: translate(2px, 2px) rotate(0deg); }
+            10% { transform: translate(-2px, -3px) rotate(-1deg); }
+            20% { transform: translate(-4px, 0px) rotate(1deg); }
+            30% { transform: translate(4px, 3px) rotate(0deg); }
+            40% { transform: translate(2px, -2px) rotate(1deg); }
+            50% { transform: translate(-2px, 3px) rotate(-1deg); }
+            60% { transform: translate(-4px, 2px) rotate(0deg); }
+            70% { transform: translate(4px, 2px) rotate(-1deg); }
+            80% { transform: translate(-2px, -2px) rotate(1deg); }
+            90% { transform: translate(2px, 3px) rotate(0deg); }
+            100% { transform: translate(2px, -3px) rotate(-1deg); }
+        }
+        .shake-screen { 
+            animation: shake 0.4s cubic-bezier(.36,.07,.19,.97) both; 
+        }
+    </style>
+</head>
+<body id="gameBody">
+
+    <div id="bg-sky"></div>
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- UI Overlay Layer -->
+    <div id="ui-layer">
+        <div id="scoreDisplay" class="absolute top-4 left-4 text-white text-3xl font-black drop-shadow-md hidden flex items-center gap-4" style="text-shadow: 2px 2px 4px rgba(0,0,0,0.8);">
+            <div>Lv: <span id="levelValue" class="text-blue-300">1</span></div>
+            <div>Score: <span id="scoreValue">0</span></div>
+            <div class="text-yellow-400 text-2xl">🪙 <span id="coinCount">0</span></div>
+        </div>
+
+        <!-- Level Up Text Effect -->
+        <div id="levelUpText" class="absolute top-1/4 w-full text-center text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-red-500 to-pink-500 transition-opacity duration-300 opacity-0 pointer-events-none z-50" style="filter: drop-shadow(0 0 20px rgba(255,255,255,0.8));">
+            LEVEL UP!
+        </div>
+
+        <!-- Start Screen -->
+        <div id="startScreen" class="text-center pointer-events-auto bg-green-900/80 p-10 rounded-3xl shadow-2xl backdrop-blur-md border-4 border-green-700">
+            <h1 class="text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-br from-green-300 to-yellow-500 mb-4 drop-shadow-lg">TARZAN RUNNER</h1>
+            <p class="text-green-100 mb-8 text-xl font-semibold">
+                Tap on ground to <b>JUMP</b>.<br>
+                Tap & Hold in air to <b>SWING</b>.<br>
+                Collect 🪙 Coins for points!
+            </p>
+            <button id="startBtn" class="px-10 py-4 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white text-2xl font-bold rounded-full transition-transform hover:scale-105 active:scale-95 shadow-[0_0_15px_rgba(34,197,94,0.5)] border-2 border-green-300">
+                PLAY NOW
+            </button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="gameOverScreen" class="text-center pointer-events-auto bg-red-900/90 p-10 rounded-3xl shadow-2xl backdrop-blur-md border-4 border-red-700 hidden">
+            <h2 class="text-6xl font-extrabold text-red-400 mb-4 drop-shadow-lg">GAME OVER!</h2>
+            <p class="text-red-100 mb-4 text-2xl font-semibold">Final Score: <span id="finalScore" class="font-bold text-white">0</span></p>
+            <p class="text-yellow-400 mb-8 text-xl font-semibold">Coins Collected: <span id="finalCoins" class="font-bold text-white">0</span></p>
+            <button id="restartBtn" class="px-10 py-4 bg-gradient-to-r from-red-500 to-orange-600 hover:from-red-400 hover:to-orange-500 text-white text-2xl font-bold rounded-full transition-transform hover:scale-105 active:scale-95 shadow-[0_0_15px_rgba(239,68,68,0.5)] border-2 border-red-300">
+                TRY AGAIN
+            </button>
+        </div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const gameBody = document.getElementById('gameBody');
+
+    // UI Elements
+    const startScreen = document.getElementById('startScreen');
+    const gameOverScreen = document.getElementById('gameOverScreen');
+    const scoreDisplay = document.getElementById('scoreDisplay');
+    const levelValueDisplay = document.getElementById('levelValue');
+    const levelUpText = document.getElementById('levelUpText');
+    const scoreValue = document.getElementById('scoreValue');
+    const coinCountDisplay = document.getElementById('coinCount');
+    const finalScore = document.getElementById('finalScore');
+    const finalCoins = document.getElementById('finalCoins');
+    const startBtn = document.getElementById('startBtn');
+    const restartBtn = document.getElementById('restartBtn');
+
+    // Game Constants & State
+    let width, height;
+    let animationId;
+    let gameState = 'START'; // START, PLAYING, GAMEOVER
+    
+    // Scores & Progression
+    let score = 0;
+    let maxDistance = 0;
+    let coinsCollected = 0;
+    let flashAlpha = 0; 
+    let speedMultiplier = 1.0; // Increases over time for more fun
+    let currentLevel = 1;
+    let levelUpTimer = 0;
+    
+    // Camera
+    let cameraX = 0;
+    let cameraY = 0;
+
+    // Physics constants
+    const GRAVITY = 0.45; // 重力を少し軽くして滞空時間を長く
+    const BASE_RUN_SPEED = 9;
+    const JUMP_FORCE = 11.5; // ジャンプ力を少し下げて高すぎないように調整
+    const MAX_VELOCITY = 28;
+    const SPRING_K = 0.04;
+    const SPRING_DAMPING = 0.98;
+    const AIR_FRICTION = 0.99;
+    const GRAB_RADIUS = 600; // 掴める範囲を大幅に拡大
+
+    // Player Object
+    const player = {
+        x: 0, y: 0, vx: 0, vy: 0,
+        width: 20, height: 40,
+        state: 'FALLING', // RUNNING, JUMPING, FALLING, SWINGING
+        attachedAnchor: null,
+        ropeLength: 0,
+        isPointerDown: false,
+        trail: [] // Array for motion blur trail
+    };
+
+    // World Elements
+    let platforms = [];
+    let spikes = [];
+    let anchors = [];
+    let bgTrees = [];
+    let coins = [];
+    let particles = [];
+    
+    let cursorX = -200; 
+    let baseGroundY = 200;
+
+    // Initialize/Resize Canvas
+    function resize() {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+        if(gameState === 'START') {
+            cameraY = -height * 0.2;
+        }
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // Procedural Generation
+    function generateWorld(targetX) {
+        while (cursorX < targetX) {
+            let isPit = Math.random() < 0.25 && cursorX > 800;
+            
+            if (isPit) {
+                // 穴の幅を狭くして、飛び越えやすくしました (最大でも約150程度)
+                let pitWidth = 80 + Math.random() * 70; 
+                let anchorY = baseGroundY - 350 - Math.random() * 150;
+                anchors.push({ 
+                    x: cursorX + pitWidth / 2, 
+                    y: anchorY 
+                });
+                
+                // Spawn Coin Arc over pit (higher up in the swing path)
+                spawnCoinArc(cursorX + 50, anchorY + 150, pitWidth);
+
+                cursorX += pitWidth;
+            } else {
+                // 足場を大幅に長くして着地しやすくしました (400〜800)
+                let platW = 400 + Math.random() * 400;
+                let platY = baseGroundY + (Math.random() - 0.5) * 150;
+                
+                if(platY > 400) platY = 400;
+                if(platY < 0) platY = 0;
+                baseGroundY = platY;
+
+                platforms.push({ x: cursorX, y: platY, w: platW, h: 800 });
+
+                // Spikes
+                if (Math.random() < 0.5 && cursorX > 800) {
+                    let spikeCount = Math.floor(1 + Math.random() * 4);
+                    for(let i=0; i<spikeCount; i++) {
+                        let spikeX = cursorX + platW * 0.3 + (i * 40);
+                        if (spikeX < cursorX + platW - 50) {
+                            spikes.push({ x: spikeX, y: platY, w: 30, h: 30 });
+                        }
+                    }
+                }
+
+                // Anchors above platform
+                if (Math.random() < 0.3) {
+                    let anchorY = platY - 300 - Math.random()*200;
+                    anchors.push({ x: cursorX + platW/2, y: anchorY });
+                    // Coins along the swing path
+                    spawnCoinArc(cursorX + platW/4, anchorY + 150, platW/2);
+                } else if (Math.random() < 0.4) {
+                    // Coins on platform
+                    spawnCoinArc(cursorX + platW/4, platY - 150, platW/2);
+                }
+                
+                cursorX += platW;
+            }
+            
+            // Parallax Trees
+            if (Math.random() > 0.3) {
+                bgTrees.push({
+                    x: cursorX - 200 + Math.random() * 200,
+                    width: 50 + Math.random() * 60,
+                    color: `rgba(6, 78, 59, ${0.3 + Math.random() * 0.4})`,
+                    speed: 0.3 + Math.random() * 0.2
+                });
+            }
+        }
+    }
+
+    function spawnCoinArc(startX, startY, width) {
+        let num = 3 + Math.floor(Math.random() * 4);
+        for(let i=0; i<num; i++) {
+            coins.push({
+                x: startX + (i / (num-1)) * width,
+                y: startY - Math.sin((i / (num-1)) * Math.PI) * 150, // Deeper arc to match swings
+                w: 20, h: 20,
+                collected: false
+            });
+        }
+    }
+
+    function spawnParticles(x, y, color, count, speed = 10) {
+        for(let i=0; i<count; i++) {
+            particles.push({
+                x: x, y: y,
+                vx: (Math.random() - 0.5) * speed,
+                vy: (Math.random() - 0.5) * speed,
+                life: 1.0,
+                color: color,
+                size: 2 + Math.random() * 4
+            });
+        }
+    }
+
+    function resetGame() {
+        platforms = []; spikes = []; anchors = []; bgTrees = []; coins = []; particles = [];
+        cursorX = -200; baseGroundY = 200;
+
+        platforms.push({ x: -200, y: 200, w: 1000, h: 800 });
+        cursorX = 800;
+        
+        generateWorld(width * 2);
+
+        player.x = 100; player.y = 0; 
+        player.vx = BASE_RUN_SPEED; player.vy = 0;
+        player.state = 'FALLING';
+        player.attachedAnchor = null;
+        player.isPointerDown = false;
+        player.trail = [];
+        
+        cameraX = player.x - width * 0.3;
+        cameraY = player.y - height * 0.6;
+        
+        score = 0; maxDistance = 0; coinsCollected = 0;
+        currentLevel = 1; levelUpTimer = 0;
+        levelUpText.style.opacity = 0;
+        speedMultiplier = 1.0;
+        gameBody.classList.remove('shake-screen');
+        updateScoreDisplay();
+    }
+
+    // Input Handling
+    function handlePointerDown() {
+        if (gameState !== 'PLAYING') return;
+        player.isPointerDown = true;
+
+        if (player.state === 'RUNNING') {
+            player.vy = -JUMP_FORCE - (speedMultiplier - 1) * 2; // Jump slightly higher as speed increases
+            player.state = 'JUMPING';
+        } else if (player.state === 'JUMPING' || player.state === 'FALLING') {
+            let bestAnchor = null;
+            let bestScore = -Infinity;
+
+            for (let a of anchors) {
+                let dx = a.x - player.x;
+                let dy = a.y - player.y;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist < GRAB_RADIUS && dx > -200) { 
+                    // 前方かつ少し上にある枝を優先的に掴みやすくするスコア計算
+                    let anchorScore = (dx * 2.0) - (dy * 1.5) - (dist * 0.5);
+                    if (anchorScore > bestScore) {
+                        bestScore = anchorScore;
+                        bestAnchor = a;
+                    }
+                }
+            }
+
+            if (bestAnchor) {
+                player.attachedAnchor = bestAnchor;
+                let currentDist = Math.sqrt(Math.pow(bestAnchor.x - player.x, 2) + Math.pow(bestAnchor.y - player.y, 2));
+                player.ropeLength = Math.max(currentDist * 0.7, 80);
+                
+                player.vx += 5 * speedMultiplier; // Boost based on speed
+                player.state = 'SWINGING';
+            }
+        }
+    }
+
+    function handlePointerUp() {
+        if (gameState !== 'PLAYING') return;
+        player.isPointerDown = false;
+
+        if (player.state === 'SWINGING') {
+            player.attachedAnchor = null;
+            player.state = 'FALLING';
+            let currentRunSpeed = BASE_RUN_SPEED * speedMultiplier;
+            
+            // 離した時に前方と上方に強いブーストをかけて落ちにくくする
+            if (player.vx < currentRunSpeed) player.vx = currentRunSpeed + 4; 
+            else player.vx += 3;
+            player.vy -= 4; // 上への飛びすぎを防ぐため、上方向のブーストを9から4に軽減
+        }
+    }
+
+    window.addEventListener('pointerdown', (e) => {
+        if (e.target !== startBtn && e.target !== restartBtn) handlePointerDown();
+    });
+    window.addEventListener('pointerup', handlePointerUp);
+
+    startBtn.addEventListener('click', () => {
+        gameState = 'PLAYING';
+        startScreen.classList.add('hidden');
+        scoreDisplay.classList.remove('hidden');
+        resetGame();
+    });
+
+    restartBtn.addEventListener('click', () => {
+        gameState = 'PLAYING';
+        gameOverScreen.classList.add('hidden');
+        resetGame();
+    });
+
+    function setGameOver(cause) {
+        gameState = 'GAMEOVER';
+        
+        if(cause === 'SPIKE') {
+            flashAlpha = 0.8;
+            gameBody.classList.remove('shake-screen');
+            void gameBody.offsetWidth; // trigger reflow
+            gameBody.classList.add('shake-screen');
+            spawnParticles(player.x, player.y, '#FF0000', 50, 15); // Blood/explosion
+        }
+
+        finalScore.innerText = score;
+        finalCoins.innerText = coinsCollected;
+        gameOverScreen.classList.remove('hidden');
+        scoreDisplay.classList.add('hidden');
+    }
+
+    function updateScoreDisplay() {
+        // Level up check
+        let calculatedLevel = Math.floor(score / 1000) + 1;
+        if (calculatedLevel > currentLevel) {
+            currentLevel = calculatedLevel;
+            levelUpTimer = 100; // Show text for ~1.5 seconds
+            speedMultiplier += 0.15; // Speed boost per level!
+            levelUpText.style.opacity = 1;
+            
+            // Level up fireworks around player
+            spawnParticles(player.x, player.y, '#FFD700', 80, 20); // Gold
+            spawnParticles(player.x, player.y, '#3b82f6', 80, 20); // Blue
+            spawnParticles(player.x, player.y, '#ef4444', 80, 20); // Red
+        }
+
+        levelValueDisplay.innerText = currentLevel;
+        scoreValue.innerText = score;
+        coinCountDisplay.innerText = coinsCollected;
+    }
+
+    function checkAABB(px, py, pw, ph, rx, ry, rw, rh) {
+        const margin = 5;
+        return (px - pw/2 + margin < rx + rw && 
+                px + pw/2 - margin > rx && 
+                py > ry + margin && 
+                py - ph + margin < ry + rh);
+    }
+
+    function drawWorld() {
+        // Platforms
+        platforms.forEach(p => {
+            ctx.fillStyle = '#15803d'; // Darker green
+            ctx.fillRect(p.x, p.y, p.w, 20);
+            ctx.fillStyle = '#451a03'; // Darker dirt
+            ctx.fillRect(p.x, p.y + 20, p.w, p.h - 20);
+            ctx.fillStyle = '#166534'; // Under-highlight
+            ctx.fillRect(p.x, p.y + 20, p.w, 10);
+        });
+
+        // Spikes
+        spikes.forEach(s => {
+            ctx.fillStyle = '#FF0000'; // Bright red
+            ctx.beginPath();
+            ctx.moveTo(s.x, s.y);
+            ctx.lineTo(s.x + s.w / 2, s.y - s.h);
+            ctx.lineTo(s.x + s.w, s.y);
+            ctx.fill();
+            ctx.strokeStyle = '#8B0000'; // Dark red border
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        });
+
+        // Anchors
+        anchors.forEach(a => {
+            ctx.fillStyle = '#78350f'; 
+            ctx.beginPath(); ctx.roundRect(a.x - 25, a.y - 5, 50, 10, 5); ctx.fill();
+            ctx.fillStyle = '#22c55e'; 
+            ctx.beginPath();
+            ctx.arc(a.x - 15, a.y - 5, 15, 0, Math.PI * 2);
+            ctx.arc(a.x + 10, a.y - 10, 18, 0, Math.PI * 2);
+            ctx.arc(a.x + 20, a.y, 12, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // Coins
+        coins.forEach(c => {
+            if(!c.collected) {
+                let centerX = c.x + c.w / 2;
+                let centerY = c.y + c.h / 2;
+
+                ctx.fillStyle = '#FFD700'; // Bright gold
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, 16, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = '#B8860B'; // Dark golden border
+                ctx.stroke();
+                
+                // Draw '$' in the center
+                ctx.fillStyle = '#B8860B';
+                ctx.font = 'bold 20px Inter, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('$', centerX, centerY + 1);
+            }
+        });
+
+        // Particles
+        particles.forEach(p => {
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = Math.max(0, p.life);
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        ctx.globalAlpha = 1.0;
+    }
+
+    function drawPlayer() {
+        let {x, y, vx, vy, state, trail} = player;
+        
+        // Draw Motion Trail if fast
+        if (gameState === 'PLAYING' && Math.abs(vx) > BASE_RUN_SPEED * 1.2) {
+            trail.forEach((t, i) => {
+                ctx.globalAlpha = (i / trail.length) * 0.3;
+                ctx.fillStyle = '#fcd34d';
+                ctx.beginPath();
+                ctx.arc(t.x, t.y - 20, 15, 0, Math.PI*2);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1.0;
+        }
+
+        ctx.save();
+        ctx.translate(x, y);
+
+        if (state === 'SWINGING') {
+            let targetAngle = Math.atan2(vy, vx);
+            if (targetAngle > Math.PI / 2) targetAngle = Math.PI / 2;
+            if (targetAngle < -Math.PI / 2) targetAngle = -Math.PI / 2;
+            ctx.rotate(targetAngle * 0.6);
+        } else if (state === 'JUMPING' || state === 'FALLING') {
+            ctx.rotate(0.1); 
+        }
+
+        const skinColor = '#292524'; // Darker, almost black player
+        const loinclothColor = '#78350f'; 
+
+        ctx.strokeStyle = skinColor;
+        ctx.lineWidth = 6; // Thicker lines
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        let headY = -35;
+        let waistY = -15;
+
+        // Head
+        ctx.beginPath(); ctx.fillStyle = skinColor; ctx.arc(0, headY, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        // Body
+        ctx.beginPath(); ctx.moveTo(0, headY + 7); ctx.lineTo(0, waistY); ctx.stroke();
+
+        let time = Date.now() / 100;
+        if (state === 'RUNNING') {
+            // Speed up animation based on multiplier
+            let runAnimSpeed = time * speedMultiplier * 1.5;
+            let legSwing = Math.sin(runAnimSpeed) * 15;
+            let armSwing = Math.cos(runAnimSpeed) * 10;
+            
+            ctx.beginPath();
+            ctx.moveTo(0, waistY); ctx.lineTo(-legSwing, 0); 
+            ctx.moveTo(0, waistY); ctx.lineTo(legSwing, 0);  
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(0, headY + 10); ctx.lineTo(-armSwing, waistY - 5);
+            ctx.moveTo(0, headY + 10); ctx.lineTo(armSwing, waistY - 5);
+            ctx.stroke();
+        } else if (state === 'SWINGING') {
+            ctx.beginPath();
+            ctx.moveTo(0, waistY); ctx.lineTo(-10, -5); ctx.lineTo(-5, 5);
+            ctx.moveTo(0, waistY); ctx.lineTo(10, -5); ctx.lineTo(5, 5);
+            ctx.stroke();
+        } else {
+            ctx.beginPath();
+            ctx.moveTo(0, waistY); ctx.lineTo(-10, -5); ctx.lineTo(-5, 0);
+            ctx.moveTo(0, waistY); ctx.lineTo(12, 0);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(0, headY + 10); ctx.lineTo(-10, headY);
+            ctx.moveTo(0, headY + 10); ctx.lineTo(15, headY + 5);
+            ctx.stroke();
+        }
+
+        // Loincloth
+        ctx.fillStyle = loinclothColor;
+        ctx.beginPath();
+        ctx.moveTo(-6, waistY - 2); ctx.lineTo(6, waistY - 2);
+        ctx.lineTo(4, waistY + 6); ctx.lineTo(-4, waistY + 6);
+        ctx.closePath(); ctx.fill();
+
+        ctx.restore();
+
+        // Vine
+        if (state === 'SWINGING' && player.attachedAnchor) {
+            let ax = player.attachedAnchor.x;
+            let ay = player.attachedAnchor.y;
+            let pTopY = y - 25; 
+            ctx.beginPath(); ctx.strokeStyle = '#14532d'; ctx.lineWidth = 8; // Darker, thicker vine
+            ctx.moveTo(x, pTopY); ctx.lineTo(ax, ay); ctx.stroke();
+            
+            ctx.beginPath(); ctx.strokeStyle = skinColor; ctx.lineWidth = 6;
+            let dx = ax - x; let dy = ay - pTopY; let dist = Math.sqrt(dx*dx + dy*dy); let armLen = 25;
+            ctx.moveTo(x, pTopY); ctx.lineTo(x + (dx/dist)*armLen, pTopY + (dy/dist)*armLen); ctx.stroke();
+        }
+    }
+
+    function loop() {
+        if (gameState === 'PLAYING') {
+            // Speed up over time (cap at 2.0x)
+            if (speedMultiplier < 2.0) speedMultiplier += 0.0002;
+            let currentRunSpeed = BASE_RUN_SPEED * speedMultiplier;
+
+            // Trail logic
+            player.trail.push({x: player.x, y: player.y});
+            if (player.trail.length > 5) player.trail.shift();
+
+            // --- PHYSICS ---
+            if (player.state === 'SWINGING' && player.attachedAnchor) {
+                player.vy += GRAVITY;
+                let dx = player.attachedAnchor.x - player.x;
+                let dy = player.attachedAnchor.y - (player.y - player.height/2);
+                let dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist > player.ropeLength) {
+                    let force = (dist - player.ropeLength) * SPRING_K;
+                    player.vx += (dx / dist) * force;
+                    player.vy += (dy / dist) * force;
+                }
+                player.vx *= SPRING_DAMPING;
+                player.vy *= SPRING_DAMPING;
+            } else {
+                if (player.state === 'RUNNING') {
+                    player.vx = currentRunSpeed; 
+                    player.vy = 0; 
+                } else {
+                    player.vy += GRAVITY;
+                    if (player.vx > currentRunSpeed) player.vx *= AIR_FRICTION;
+                    if (player.vx < currentRunSpeed) player.vx += 0.2; 
+
+                    // 落下しないように、空中で最低限の前進スピードを保つ
+                    if (player.vx < 5) player.vx = 5;
+                }
+            }
+
+            let speed = Math.sqrt(player.vx * player.vx + player.vy * player.vy);
+            if (speed > MAX_VELOCITY) {
+                player.vx = (player.vx / speed) * MAX_VELOCITY;
+                player.vy = (player.vy / speed) * MAX_VELOCITY;
+            }
+
+            player.x += player.vx;
+            player.y += player.vy;
+
+            // --- COLLISIONS ---
+            let grounded = false;
+            if (player.state !== 'SWINGING') {
+                if (player.vy >= 0) {
+                    for (let p of platforms) {
+                        // 着地判定を大幅に甘くする（ギリギリでも乗れるように30pxオマケ）
+                        if (player.x + player.width/2 + 30 > p.x && player.x - player.width/2 - 30 < p.x + p.w) {
+                            let prevY = player.y - player.vy;
+                            if (prevY <= p.y + 10 && player.y >= p.y - 10) {
+                                // 端っこギリギリだった場合は、強制的に足場の上にズラしてあげる
+                                if (player.x < p.x) player.x = p.x + 10;
+                                else if (player.x > p.x + p.w) player.x = p.x + p.w - 10;
+
+                                player.y = p.y; player.vy = 0; player.vx = currentRunSpeed;
+                                player.state = 'RUNNING'; grounded = true; break;
+                            }
+                        }
+                    }
+                }
+                if (!grounded && player.state === 'RUNNING') player.state = 'FALLING';
+            }
+
+            // Spikes
+            for (let s of spikes) {
+                if (checkAABB(player.x, player.y, player.width, player.height, s.x, s.y - s.h, s.w, s.h)) {
+                    setGameOver('SPIKE');
+                }
+            }
+
+            // Coins (Super Magnet Effect)
+            for (let c of coins) {
+                if (!c.collected) {
+                    let centerX = c.x + c.w / 2;
+                    let centerY = c.y + c.h / 2;
+                    let playerCenterY = player.y - player.height / 2;
+                    
+                    let dx = player.x - centerX;
+                    let dy = playerCenterY - centerY;
+                    let dist = Math.sqrt(dx * dx + dy * dy);
+
+                    // Magnet pulling effect
+                    if (dist < 250) {
+                        c.x += dx * 0.15; // Move towards player
+                        c.y += dy * 0.15; // Move towards player
+                    }
+                    
+                    // Collect threshold
+                    if (dist < 45) {
+                        c.collected = true;
+                        coinsCollected++;
+                        score += 50;
+                        spawnParticles(c.x + c.w/2, c.y + c.h/2, '#FFD700', 12, 6); // Bright gold sparks
+                        updateScoreDisplay();
+                    }
+                }
+            }
+
+            // --- CAMERA & STRICT PIT DEATH ---
+            // Calculate base camera tracking
+            let targetCamX = player.x - width * 0.25; 
+            let targetCamY = player.y - height * 0.6; 
+
+            // STRICT CAMERA LOCK: If player falls into a pit, don't follow them down
+            // Estimate highest nearby ground
+            let nearbyPlatforms = platforms.filter(p => p.x < player.x + 500 && p.x + p.w > player.x - 500);
+            let localGroundY = nearbyPlatforms.length > 0 ? Math.max(...nearbyPlatforms.map(p => p.y)) : baseGroundY;
+            
+            // 高く飛びすぎても、常に画面下部に地面が見えるようにカメラの最高到達点を制限
+            targetCamY = Math.max(targetCamY, localGroundY - height + 200);
+
+            if (player.y > localGroundY + 50) {
+                // Lock Y tracking so they visually fall off the screen
+                targetCamY = cameraY; 
+            }
+
+            // Move camera
+            if (targetCamX > cameraX) cameraX += (targetCamX - cameraX) * 0.1;
+            cameraY += (targetCamY - cameraY) * 0.1;
+
+            // INSTANT DEATH if fallen past the locked camera view
+            if (player.y > cameraY + height + 100) {
+                setGameOver('PIT');
+            }
+
+            // Particles Update
+            particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.life -= 0.03; });
+            particles = particles.filter(p => p.life > 0);
+
+            // Cleanup & Gen
+            generateWorld(player.x + width * 2);
+            platforms = platforms.filter(p => p.x + p.w > cameraX - 500);
+            spikes = spikes.filter(s => s.x + s.w > cameraX - 500);
+            anchors = anchors.filter(a => a.x > cameraX - 500);
+            coins = coins.filter(c => c.x > cameraX - 500);
+            bgTrees = bgTrees.filter(t => t.x + t.width > cameraX - 500);
+
+            // Score Update
+            if (player.x > maxDistance) {
+                maxDistance = player.x;
+                score = Math.floor(maxDistance / 50) + (coinsCollected * 50);
+                updateScoreDisplay();
+            }
+
+            // Level Up Timer handling
+            if (levelUpTimer > 0) {
+                levelUpTimer--;
+                if (levelUpTimer <= 0) levelUpText.style.opacity = 0;
+            }
+        }
+
+        // --- DRAWING ---
+        ctx.clearRect(0, 0, width, height); 
+        
+        // Parallax Trees
+        bgTrees.forEach(tree => {
+            let screenX = tree.x - (cameraX * tree.speed);
+            if (screenX > -tree.width && screenX < width) {
+                ctx.fillStyle = tree.color;
+                ctx.fillRect(screenX, -cameraY * tree.speed - 200, tree.width, height + 800);
+            }
+        });
+
+        ctx.save();
+        ctx.translate(-cameraX, -cameraY);
+
+        drawWorld();
+
+        if (gameState !== 'START') {
+            drawPlayer();
+            
+            // Draw Grab Radius Indicator
+            if (gameState === 'PLAYING' && (player.state === 'FALLING' || player.state === 'JUMPING') && !player.isPointerDown) {
+                ctx.beginPath(); ctx.arc(player.x, player.y - player.height/2, GRAB_RADIUS, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.03)'; ctx.fill();
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'; ctx.lineWidth = 1;
+                ctx.setLineDash([5, 10]); ctx.stroke(); ctx.setLineDash([]);
+            }
+        }
+
+        ctx.restore();
+
+        // Flash Effect
+        if (flashAlpha > 0) {
+            ctx.fillStyle = `rgba(255, 0, 0, ${flashAlpha})`;
+            ctx.fillRect(0, 0, width, height);
+            flashAlpha -= 0.05; 
+            if (flashAlpha < 0) flashAlpha = 0;
+        }
+
+        animationId = requestAnimationFrame(loop);
+    }
+
+    generateWorld(window.innerWidth * 2);
+    loop();
+
+</script>
+</body>
+</html>
